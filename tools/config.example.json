@@ -1,0 +1,9 @@
+{
+  "claude_api_key": "sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "claude_model": "claude-sonnet-4-5-20250929",
+  "anki_connect_url": "http://localhost:8765",
+  "anki_deck": "英语学习",
+  "anki_model": "Basic",
+  "base_tags": ["reading-auto"],
+  "article_tag": "22T1"
+}
