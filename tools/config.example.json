@@ -1,9 +1,12 @@
 {
-  "claude_api_key": "sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "claude_api_key": "sk-ant-xxxxx-在这里填入你的 API Key",
+  "claude_api_base_url": "https://code.newcli.com/claude/aws/v1",
   "claude_model": "claude-sonnet-4-5-20250929",
-  "anki_connect_url": "http://localhost:8765",
-  "anki_deck": "英语学习",
-  "anki_model": "Basic",
+  "anki_connect_url": "http://127.0.0.1:8765",
+  "anki_deck": "考研单词",
+  "anki_model": "问答题",
+  "anki_front_field": "正面",
+  "anki_back_field": "背面",
   "base_tags": ["reading-auto"],
   "article_tag": "22T1"
 }

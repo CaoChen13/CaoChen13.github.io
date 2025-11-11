@@ -254,8 +254,15 @@ class SimpleRTFParser:
 class ClaudeExplainer:
     """使用 Claude API 生成解释"""
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
-        self.client = Anthropic(api_key=api_key)
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929", base_url: Optional[str] = None):
+        # 支持自定义 base_url（代理站点）
+        if base_url:
+            # 移除 /messages 后缀（如果有）
+            if base_url.endswith('/messages'):
+                base_url = base_url[:-9]
+            self.client = Anthropic(api_key=api_key, base_url=base_url)
+        else:
+            self.client = Anthropic(api_key=api_key)
         self.model = model
 
     def explain(self, sentence: str, marks: List[Dict]) -> Optional[str]:
@@ -335,9 +342,14 @@ class AnkiConnector:
             raise Exception(f"无法连接 AnkiConnect: {e}")
 
     def add_note(self, deck_name: str, model_name: str,
-                 front: str, back: str, tags: List[str]) -> Optional[int]:
+                 front: str, back: str, tags: List[str],
+                 front_field: str = "Front", back_field: str = "Back") -> Optional[int]:
         """
         添加卡片
+
+        Args:
+            front_field: 正面字段名（默认 "Front"，中文模板可能是 "正面"）
+            back_field: 背面字段名（默认 "Back"，中文模板可能是 "背面"）
 
         Returns:
             卡片 ID，失败返回 None
@@ -349,8 +361,8 @@ class AnkiConnector:
                     "deckName": deck_name,
                     "modelName": model_name,
                     "fields": {
-                        "Front": front,
-                        "Back": back
+                        front_field: front,
+                        back_field: back
                     },
                     "tags": tags
                 }
@@ -376,7 +388,8 @@ class WordToAnkiConverter:
         self.config = config
         self.claude = ClaudeExplainer(
             config['claude_api_key'],
-            config.get('claude_model', 'claude-sonnet-4-5-20250929')
+            config.get('claude_model', 'claude-sonnet-4-5-20250929'),
+            config.get('claude_api_base_url')  # 支持代理站点
         )
         self.anki = AnkiConnector(config.get('anki_connect_url', 'http://localhost:8765'))
 
@@ -411,6 +424,8 @@ class WordToAnkiConverter:
         """
         deck_name = self.config['anki_deck']
         model_name = self.config['anki_model']
+        front_field = self.config.get('anki_front_field', 'Front')
+        back_field = self.config.get('anki_back_field', 'Back')
         base_tags = self.config.get('base_tags', ['reading-auto'])
         article_tag = self.config.get('article_tag', '')
 
@@ -444,7 +459,8 @@ class WordToAnkiConverter:
 
             # 添加到 Anki
             print("  → 添加到 Anki...")
-            note_id = self.anki.add_note(deck_name, model_name, front, back, tags)
+            note_id = self.anki.add_note(deck_name, model_name, front, back, tags,
+                                         front_field, back_field)
 
             if note_id:
                 print(f"  ✓ 成功（卡片 ID: {note_id}）")
