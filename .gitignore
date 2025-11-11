@@ -15,7 +15,8 @@ dist/
 *.egg-info/
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/launch.json
 .idea/
 *.swp
 *.swo

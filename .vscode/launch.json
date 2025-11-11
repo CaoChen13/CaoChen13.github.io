@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Word to Anki - 生成卡片",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/word_to_anki.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/tools",
+            "justMyCode": true
+        },
+        {
+            "name": "Word to Anki - 简化版",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/run.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/tools",
+            "justMyCode": true
+        }
+    ]
+}
