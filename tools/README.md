@@ -122,14 +122,23 @@ The company decided to <红色>leverage</红色> its existing
 
 ### 步骤 3: 运行脚本
 
+**方法 1: VSCode 运行（推荐）**
+
+1. 用 VSCode 打开项目文件夹 `CaoChen13.github.io`
+2. 打开文件 `tools/run.py`（简化版启动器）
+3. 点击右上角 **▶️ 运行 Python 文件** 按钮
+4. 或按快捷键 `F5` 选择 "Word to Anki - 简化版"
+
+**方法 2: 命令行运行**
+
 ```bash
 cd tools
 python word_to_anki.py
 ```
 
-或者（如果设置了可执行权限）:
+或者使用简化版:
 ```bash
-./word_to_anki.py
+python run.py
 ```
 
 ### 步骤 4: 查看结果
