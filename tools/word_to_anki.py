@@ -564,14 +564,11 @@ class WordToAnkiConverter:
 
     def _format_front(self, sentence: str, marks: List[Dict]) -> str:
         """格式化卡片正面（带 HTML 高亮）"""
-        # 为标记词添加 HTML 样式
         result = sentence
 
-        # 按位置倒序排序，避免替换时位置偏移
-        sorted_marks = sorted(marks, key=lambda m: m['position'][0], reverse=True)
-
-        for mark in sorted_marks:
-            start, end = mark['position']
+        # 使用 text 查找替换，而不是 position
+        # 这样即使合并后 position 不准，也能正确替换
+        for mark in marks:
             text = mark['text']
             mark_type = mark['type']
 
@@ -580,7 +577,8 @@ class WordToAnkiConverter:
             else:  # yellow
                 styled = f'<span style="background-color: yellow;">{text}</span>'
 
-            result = result[:start] + styled + result[end:]
+            # 只替换第一次出现
+            result = result.replace(text, styled, 1)
 
         return result
 
