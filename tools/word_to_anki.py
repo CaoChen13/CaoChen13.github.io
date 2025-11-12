@@ -186,20 +186,36 @@ class SimpleRTFParser:
                 self.current_marks = []
                 self.current_tag_stack = []
                 self.current_style = {}
+                self.ignore_content = False  # 是否忽略内容（style/script标签内）
 
             def handle_starttag(self, tag, attrs):
                 self.current_tag_stack.append(tag)
+
+                # 忽略 style、script、head 等标签内的内容
+                if tag.lower() in ('style', 'script', 'head'):
+                    self.ignore_content = True
+                    return
+
                 # 检查样式
-                style = dict(attrs).get('style', '')
+                attrs_dict = dict(attrs)
+                style = attrs_dict.get('style', '')
                 if 'color' in style or 'background' in style:
                     self.current_style = {'style': style}
 
             def handle_endtag(self, tag):
+                # 恢复内容处理
+                if tag.lower() in ('style', 'script', 'head'):
+                    self.ignore_content = False
+
                 if self.current_tag_stack and self.current_tag_stack[-1] == tag:
                     self.current_tag_stack.pop()
                 self.current_style = {}
 
             def handle_data(self, data):
+                # 忽略特定标签内的内容
+                if self.ignore_content:
+                    return
+
                 text = data.strip()
                 if not text:
                     return
@@ -256,6 +272,10 @@ class ClaudeExplainer:
 
     def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929", base_url: Optional[str] = None):
         # 支持自定义 base_url（代理站点）
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url
+
         if base_url:
             # 移除 /messages 后缀（如果有）
             if base_url.endswith('/messages'):
@@ -263,7 +283,7 @@ class ClaudeExplainer:
             self.client = Anthropic(api_key=api_key, base_url=base_url)
         else:
             self.client = Anthropic(api_key=api_key)
-        self.model = model
+            self.base_url = "https://api.anthropic.com/v1"
 
     def explain(self, sentence: str, marks: List[Dict]) -> Optional[str]:
         """
@@ -311,6 +331,18 @@ class ClaudeExplainer:
 
         except Exception as e:
             print(f"Claude API 调用失败: {e}")
+            print()
+            print("  调试信息:")
+            print(f"    API 地址: {self.base_url}/messages")
+            print(f"    模型: {self.model}")
+            print(f"    API Key 前缀: {self.api_key[:15]}...")
+            print()
+            print("  常见问题:")
+            print("    1. API Key 错误 - 检查 config.json 中的 claude_api_key")
+            print("    2. 代理地址错误 - 检查 claude_api_base_url 是否正确")
+            print("    3. 模型名错误 - 检查代理站点支持的模型列表")
+            print("    4. 账户余额不足 - 联系代理站点管理员")
+            print()
             return None
 
 
@@ -548,6 +580,33 @@ def main():
         print("  3. AnkiConnect 配置正确（默认 http://localhost:8765）")
         sys.exit(1)
     print("✓ AnkiConnect 连接成功")
+
+    # 检查 Claude API 配置
+    print("\n检查 Claude API 配置...")
+    claude = ClaudeExplainer(
+        config['claude_api_key'],
+        config.get('claude_model', 'claude-sonnet-4-5-20250929'),
+        config.get('claude_api_base_url')
+    )
+    print(f"  API 地址: {claude.base_url}/messages")
+    print(f"  模型: {claude.model}")
+    print(f"  API Key 前缀: {claude.api_key[:15]}...")
+
+    # 测试 API 连接（可选，用短句测试）
+    print("\n  测试 API 连接...")
+    try:
+        test_result = claude.explain(
+            "This is a test.",
+            [{'text': 'test', 'type': 'red', 'position': (10, 14)}]
+        )
+        if test_result:
+            print("  ✓ Claude API 连接成功")
+        else:
+            print("  ⚠️  API 测试失败，但将继续运行（可能是临时错误）")
+    except Exception as e:
+        print(f"  ✗ API 测试失败: {e}")
+        print("\n  如果确认配置无误，可以忽略此警告继续运行")
+        input("\n  按回车键继续（或 Ctrl+C 退出）...")
 
     # 从剪贴板读取
     print("\n从剪贴板读取内容...")
