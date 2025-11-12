@@ -239,8 +239,9 @@ class SimpleRTFParser:
                         'position': (start_pos, end_pos)
                     })
 
-                # 句子结束判断（句号、感叹号、问号、分号）
-                if text.rstrip().endswith(('.', '!', '?', ';', '。', '！', '？', '；')):
+                # 句子结束判断（检查是否包含句子结束符）
+                has_period = any(p in text for p in ['.', '!', '?', ';', '。', '！', '？', '；'])
+                if has_period:
                     # 如果有标记，保存当前句子
                     if self.current_marks:
                         self.sentences.append({
@@ -314,11 +315,15 @@ class SimpleRTFParser:
             if is_likely_same_word and same_type:
                 # 合并：扩展位置，拼接文本
                 current['position'] = (current['position'][0], next_mark['position'][1])
-                # 从原句中提取实际文本，移除内部多余空格
+                # 从原句中提取实际文本
                 start, end = current['position']
                 raw_text = sentence[start:end]
-                # 清理：移除多余空格，保留单词结构
-                current['text'] = ' '.join(raw_text.split())
+                # 如果中间只有空格（很可能是单词被拆分），移除所有空格
+                if all(c == ' ' for c in between):
+                    current['text'] = ''.join(raw_text.split())
+                else:
+                    # 保留必要的空格（如固定搭配）
+                    current['text'] = ' '.join(raw_text.split())
             else:
                 # 不合并，保存当前标记并开始新的
                 merged.append(current)
@@ -381,23 +386,25 @@ class ClaudeExplainer:
 标记词：
 {chr(10).join(marks_desc)}
 
-解释要求（考研复习用，必须简洁）：
-1. 核心释义：给出最常见的核心意思（尽量简短）
-2. 句中含义：如果此句语境中的意思和核心释义不同，需要说明；如果相同则省略
-3. 熟词生义（重点）：如果是熟词生义、引申义，必须明确指出
-4. 固定搭配：如果是固定搭配，说明搭配的意思
-5. 句子结构：仅当句子使用了倒装/后置/前置等复杂结构时才说明，否则省略
+解释要求（考研背诵，必须简洁）：
+1. 核心释义：最常见的意思，简短
+2. 句中含义：仅当和核心释义不同时才说明
+3. 熟词生义（重点）：如有熟词生义/引申义，必须标注
+4. 固定搭配：如是搭配，说明搭配意思
+5. 复杂结构：仅当有倒装/后置/前置时说明
 
 输出格式：
-- 每个词一行
-- 格式：单词 (词性): 核心释义 [→ 句中意思]
-- 如有熟词生义，加注"(熟词生义)"
-- 不超过 3 行，直接给答案，不要多余说明
+- 每个词单独一行（用空行分隔）
+- 格式：单词: 核心释义 [→ 句中意思] (熟词生义)
+- 不要词性标注，不要多余说明
+- 直接给答案
 
 示例：
-stock (n.): 库存 → 此句中指"股票"(熟词生义)
-run into (phr.): 偶遇 → 此句中指"遇到(问题)"
-倒装：Not until... did he realize...（否定词前置的倒装结构）
+stock: 库存 → 股票 (熟词生义)
+
+run into: 偶遇 → 遇到(问题)
+
+倒装: Not until...did he...（否定词前置）
 
 现在请解释："""
 
@@ -566,6 +573,35 @@ class WordToAnkiConverter:
 
         return result
 
+    def _format_back(self, explanation: str, marks: List[Dict]) -> str:
+        """
+        格式化卡片背面
+
+        Args:
+            explanation: Claude 生成的解释
+            marks: 标记列表
+
+        Returns:
+            格式化后的 HTML 文本
+        """
+        # 换行符转 HTML
+        result = explanation.replace('\n', '<br>')
+
+        # 给标记的单词加红色
+        for mark in marks:
+            word = mark['text']
+            # 使用正则避免重复替换
+            # 匹配单词（可能有括号等）
+            pattern = r'\b' + re.escape(word) + r'\b'
+            result = re.sub(
+                pattern,
+                f'<b style="color: red;">{word}</b>',
+                result,
+                count=1  # 只替换第一次出现
+            )
+
+        return result
+
     def convert(self, sentences: List[Dict]) -> int:
         """
         转换句子列表为 Anki 卡片
@@ -612,7 +648,7 @@ class WordToAnkiConverter:
 
             # 格式化卡片
             front = self._format_front(sentence, marks)
-            back = explanation
+            back = self._format_back(explanation, marks)
 
             # 添加到 Anki
             print("  → 添加到 Anki...")
