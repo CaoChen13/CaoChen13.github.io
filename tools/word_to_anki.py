@@ -241,11 +241,13 @@ class SimpleRTFParser:
 
                 # 句子结束判断（句号、感叹号、问号、分号）
                 if text.rstrip().endswith(('.', '!', '?', ';', '。', '！', '？', '；')):
+                    # 如果有标记，保存当前句子
                     if self.current_marks:
                         self.sentences.append({
                             'sentence': self.current_sentence.strip(),
                             'marks': self.current_marks
                         })
+                    # 无论是否有标记，都重置（开始新句子）
                     self.current_sentence = ''
                     self.current_marks = []
 
@@ -297,16 +299,26 @@ class SimpleRTFParser:
             current_end = current['position'][1]
             next_start = next_mark['position'][0]
 
-            # 相邻判断：位置差小于等于 1（可能有一个空格）
-            is_adjacent = (next_start - current_end) <= 1
+            # 检查中间的内容
+            between = sentence[current_end:next_start]
+
+            # 相邻判断：
+            # 1. 位置差小于 10 个字符
+            # 2. 中间只有空格、标点或为空
+            # 3. 类型相同
+            distance = next_start - current_end
+            # 允许的间隔字符：空格、撇号、引号、连字符
+            is_likely_same_word = distance < 10 and all(c in " '\"-" for c in between)
             same_type = current['type'] == next_mark['type']
 
-            if is_adjacent and same_type:
+            if is_likely_same_word and same_type:
                 # 合并：扩展位置，拼接文本
                 current['position'] = (current['position'][0], next_mark['position'][1])
-                # 从原句中提取实际文本（避免多余空格）
+                # 从原句中提取实际文本，移除内部多余空格
                 start, end = current['position']
-                current['text'] = sentence[start:end].strip()
+                raw_text = sentence[start:end]
+                # 清理：移除多余空格，保留单词结构
+                current['text'] = ' '.join(raw_text.split())
             else:
                 # 不合并，保存当前标记并开始新的
                 merged.append(current)
@@ -369,17 +381,25 @@ class ClaudeExplainer:
 标记词：
 {chr(10).join(marks_desc)}
 
-要求：用中文解释标记词，格式必须严格遵守：
+解释要求（考研复习用，必须简洁）：
+1. 核心释义：给出最常见的核心意思（尽量简短）
+2. 句中含义：如果此句语境中的意思和核心释义不同，需要说明；如果相同则省略
+3. 熟词生义（重点）：如果是熟词生义、引申义，必须明确指出
+4. 固定搭配：如果是固定搭配，说明搭配的意思
+5. 句子结构：仅当句子使用了倒装/后置/前置等复杂结构时才说明，否则省略
+
+输出格式：
 - 每个词一行
-- 格式：单词 (词性): 中文解释
-- 不要标题、不要分点、不要额外说明
-- 直接给出解释，不超过 3 行
+- 格式：单词 (词性): 核心释义 [→ 句中意思]
+- 如有熟词生义，加注"(熟词生义)"
+- 不超过 3 行，直接给答案，不要多余说明
 
 示例：
-upskilling (v.): 提升技能
-employable (adj.): 有就业能力的
+stock (n.): 库存 → 此句中指"股票"(熟词生义)
+run into (phr.): 偶遇 → 此句中指"遇到(问题)"
+倒装：Not until... did he realize...（否定词前置的倒装结构）
 
-现在请按此格式解释上述标记词："""
+现在请解释："""
 
         # 构建请求
         headers = {
