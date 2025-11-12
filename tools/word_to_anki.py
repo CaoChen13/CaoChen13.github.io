@@ -181,9 +181,8 @@ class SimpleRTFParser:
         class WordHTMLParser(HTMLParser):
             def __init__(self):
                 super().__init__()
-                self.sentences = []
-                self.current_sentence = ''
-                self.current_marks = []
+                self.full_text = ''  # 完整文本
+                self.all_marks = []  # 所有标记
                 self.current_tag_stack = []
                 self.current_style = {}
                 self.ignore_content = False  # 是否忽略内容（style/script标签内）
@@ -220,9 +219,9 @@ class SimpleRTFParser:
                 if not text:
                     return
 
-                start_pos = len(self.current_sentence)
-                self.current_sentence += text + ' '
-                end_pos = len(self.current_sentence)
+                start_pos = len(self.full_text)
+                self.full_text += text + ' '
+                end_pos = len(self.full_text)
 
                 # 检查是否有样式标记
                 mark_type = None
@@ -234,24 +233,11 @@ class SimpleRTFParser:
                         mark_type = 'yellow'
 
                 if mark_type:
-                    self.current_marks.append({
+                    self.all_marks.append({
                         'text': text,
                         'type': mark_type,
                         'position': (start_pos, end_pos)
                     })
-
-                # 句子结束判断（检查是否包含句子结束符）
-                has_period = any(p in text for p in ['.', '!', '?', ';', '。', '！', '？', '；'])
-                if has_period:
-                    # 如果有标记，保存当前句子
-                    if self.current_marks:
-                        self.sentences.append({
-                            'sentence': self.current_sentence.strip(),
-                            'marks': self.current_marks
-                        })
-                    # 无论是否有标记，都重置（开始新句子）
-                    self.current_sentence = ''
-                    self.current_marks = []
 
         parser = WordHTMLParser()
         try:
@@ -260,21 +246,82 @@ class SimpleRTFParser:
             print(f"HTML 解析失败: {e}")
             return []
 
-        # 处理最后一个句子
-        if parser.current_marks and parser.current_sentence.strip():
-            parser.sentences.append({
-                'sentence': parser.current_sentence.strip(),
-                'marks': parser.current_marks
-            })
+        # 第二步：按句子切分，找到包含标记的句子
+        sentences = self._split_into_sentences(parser.full_text, parser.all_marks)
 
         # 合并每个句子中相邻的相同类型标记（修复单词被拆分的问题）
-        for sent_data in parser.sentences:
+        for sent_data in sentences:
             sent_data['marks'] = self._merge_adjacent_marks(
                 sent_data['marks'],
                 sent_data['sentence']
             )
 
-        return parser.sentences
+        return sentences
+
+    def _split_into_sentences(self, full_text: str, all_marks: List[Dict]) -> List[Dict]:
+        """
+        将完整文本按句子切分，为每个句子分配标记
+
+        Args:
+            full_text: 完整文本
+            all_marks: 所有标记列表
+
+        Returns:
+            句子列表，每个句子包含其标记
+        """
+        import re
+
+        # 用正则按句子切分（保留分隔符）
+        # 匹配句号、问号、感叹号、分号，后面跟空格或结尾
+        sentence_pattern = r'([^.!?;。！？；]+[.!?;。！？；]+)'
+        raw_sentences = re.findall(sentence_pattern, full_text)
+
+        # 如果有剩余文本（最后没有句号的部分）
+        last_pos = sum(len(s) for s in raw_sentences)
+        if last_pos < len(full_text):
+            remaining = full_text[last_pos:].strip()
+            if remaining:
+                raw_sentences.append(remaining)
+
+        # 为每个句子分配标记
+        sentences = []
+        current_pos = 0
+
+        for raw_sent in raw_sentences:
+            sent_text = raw_sent.strip()
+            if not sent_text:
+                current_pos += len(raw_sent)
+                continue
+
+            # 找到这个句子在 full_text 中的位置
+            sent_start = full_text.find(sent_text, current_pos)
+            if sent_start == -1:
+                # 找不到，跳过
+                current_pos += len(raw_sent)
+                continue
+
+            sent_end = sent_start + len(sent_text)
+            current_pos = sent_end
+
+            # 找到在这个句子范围内的所有标记
+            sent_marks = []
+            for mark in all_marks:
+                mark_start, mark_end = mark['position']
+                # 标记在句子范围内
+                if mark_start >= sent_start and mark_end <= sent_end + 5:  # +5 容错
+                    # 调整标记位置（相对于句子开头）
+                    adjusted_mark = mark.copy()
+                    adjusted_mark['position'] = (mark_start - sent_start, mark_end - sent_start)
+                    sent_marks.append(adjusted_mark)
+
+            # 只保留有标记的句子
+            if sent_marks:
+                sentences.append({
+                    'sentence': sent_text,
+                    'marks': sent_marks
+                })
+
+        return sentences
 
     def _merge_adjacent_marks(self, marks: List[Dict], sentence: str) -> List[Dict]:
         """
@@ -588,21 +635,25 @@ class WordToAnkiConverter:
 
     def _format_front(self, sentence: str, marks: List[Dict]) -> str:
         """格式化卡片正面（带 HTML 高亮）"""
+        # 按位置倒序排序，从后往前替换，避免位置偏移
+        sorted_marks = sorted(marks, key=lambda m: m['position'][0], reverse=True)
+
         result = sentence
 
-        # 使用 text 查找替换，而不是 position
-        # 这样即使合并后 position 不准，也能正确替换
-        for mark in marks:
-            text = mark['text']
+        for mark in sorted_marks:
+            start, end = mark['position']
+            text = mark['text']  # 合并后的文本
             mark_type = mark['type']
 
+            # 构建样式
             if mark_type == 'red':
                 styled = f'<span style="color: red; font-weight: bold;">{text}</span>'
             else:  # yellow
                 styled = f'<span style="background-color: yellow;">{text}</span>'
 
-            # 只替换第一次出现
-            result = result.replace(text, styled, 1)
+            # 按位置替换（从后往前，避免位置变化）
+            # 用合并后的 text 替换原句中 position 位置的内容（可能是拆分的）
+            result = result[:start] + styled + result[end:]
 
         return result
 
