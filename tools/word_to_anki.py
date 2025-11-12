@@ -318,11 +318,19 @@ class SimpleRTFParser:
                 # 从原句中提取实际文本
                 start, end = current['position']
                 raw_text = sentence[start:end]
-                # 如果中间只有空格（很可能是单词被拆分），移除所有空格
-                if all(c == ' ' for c in between):
+
+                # 判断是否应该去掉空格：
+                # 如果当前和下一个都是单字符片段（如 'ci' 和 'st'），则可能是单词被拆分
+                # 如果有一个是完整单词（如 'present' 和 'and'），则保留空格
+                current_is_fragment = len(current['text']) <= 3 and ' ' not in current['text']
+                next_is_fragment = len(next_mark['text']) <= 3 and ' ' not in next_mark['text']
+                is_word_split = current_is_fragment and next_is_fragment and all(c == ' ' for c in between)
+
+                if is_word_split:
+                    # 单词被拆分：去掉所有空格
                     current['text'] = ''.join(raw_text.split())
                 else:
-                    # 保留必要的空格（如固定搭配）
+                    # 多词短语：保留空格
                     current['text'] = ' '.join(raw_text.split())
             else:
                 # 不合并，保存当前标记并开始新的
@@ -587,18 +595,24 @@ class WordToAnkiConverter:
         # 换行符转 HTML
         result = explanation.replace('\n', '<br>')
 
-        # 给标记的单词加红色
+        # 给标记的单词加颜色（红色或黄色）
         for mark in marks:
             word = mark['text']
-            # 使用正则避免重复替换
-            # 匹配单词（可能有括号等）
+            mark_type = mark['type']
+
+            # 选择颜色
+            if mark_type == 'red':
+                color = 'red'
+            else:  # yellow
+                color = '#DAA520'  # 深金色（在白底上更清晰）
+
+            # 尝试匹配：精确匹配
             pattern = r'\b' + re.escape(word) + r'\b'
-            result = re.sub(
-                pattern,
-                f'<b style="color: red;">{word}</b>',
-                result,
-                count=1  # 只替换第一次出现
-            )
+            if re.search(pattern, result, re.IGNORECASE):
+                # 精确匹配到了
+                match = re.search(pattern, result, re.IGNORECASE)
+                original_text = match.group()
+                result = result.replace(original_text, f'<b style="color: {color};">{original_text}</b>', 1)
 
         return result
 
