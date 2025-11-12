@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import requests
-from anthropic import Anthropic
 
 
 class RTFParser:
@@ -268,22 +267,29 @@ class SimpleRTFParser:
 
 
 class ClaudeExplainer:
-    """使用 Claude API 生成解释"""
+    """使用 Claude API 生成解释（使用 requests 直接调用）"""
 
     def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929", base_url: Optional[str] = None):
-        # 支持自定义 base_url（代理站点）
+        """
+        初始化 Claude API 客户端
+
+        Args:
+            api_key: API 密钥
+            model: 模型名称
+            base_url: API 基础 URL（代理站点）
+        """
         self.api_key = api_key
         self.model = model
-        self.base_url = base_url
 
+        # 设置 API URL
         if base_url:
-            # 移除 /messages 后缀（如果有）
+            # 确保有 /messages 后缀
             if base_url.endswith('/messages'):
-                base_url = base_url[:-9]
-            self.client = Anthropic(api_key=api_key, base_url=base_url)
+                self.api_url = base_url
+            else:
+                self.api_url = base_url + '/messages'
         else:
-            self.client = Anthropic(api_key=api_key)
-            self.base_url = "https://api.anthropic.com/v1"
+            self.api_url = "https://api.anthropic.com/v1/messages"
 
     def explain(self, sentence: str, marks: List[Dict]) -> Optional[str]:
         """
@@ -317,23 +323,54 @@ class ClaudeExplainer:
 
 要求：直击要点，适合考研复习，不要啰嗦。"""
 
+        # 构建请求
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': self.api_key,
+            'anthropic-version': '2023-06-01'
+        }
+
+        data = {
+            'model': self.model,
+            'max_tokens': 300,
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': prompt
+                }
+            ]
+        }
+
         try:
-            message = self.client.messages.create(
-                model=self.model,
-                max_tokens=300,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+            # 使用 requests 直接调用
+            response = requests.post(
+                self.api_url,
+                headers=headers,
+                json=data,
+                timeout=60
             )
 
-            explanation = message.content[0].text.strip()
-            return explanation
+            # 检查响应
+            if response.status_code == 200:
+                result = response.json()
+                explanation = result['content'][0]['text'].strip()
+                return explanation
+            else:
+                # 处理错误
+                print(f"Claude API 调用失败: HTTP {response.status_code}")
+                print(f"  响应: {response.text[:200]}")
+                return None
 
-        except Exception as e:
+        except requests.exceptions.Timeout:
+            print("Claude API 调用失败: 请求超时")
+            print("  提示: 网络可能较慢，请稍后重试")
+            return None
+
+        except requests.exceptions.RequestException as e:
             print(f"Claude API 调用失败: {e}")
             print()
             print("  调试信息:")
-            print(f"    API 地址: {self.base_url}/messages")
+            print(f"    API 地址: {self.api_url}")
             print(f"    模型: {self.model}")
             print(f"    API Key 前缀: {self.api_key[:15]}...")
             print()
@@ -343,6 +380,10 @@ class ClaudeExplainer:
             print("    3. 模型名错误 - 检查代理站点支持的模型列表")
             print("    4. 账户余额不足 - 联系代理站点管理员")
             print()
+            return None
+
+        except Exception as e:
+            print(f"Claude API 调用失败: {e}")
             return None
 
 
@@ -588,7 +629,7 @@ def main():
         config.get('claude_model', 'claude-sonnet-4-5-20250929'),
         config.get('claude_api_base_url')
     )
-    print(f"  API 地址: {claude.base_url}/messages")
+    print(f"  API 地址: {claude.api_url}")
     print(f"  模型: {claude.model}")
     print(f"  API Key 前缀: {claude.api_key[:15]}...")
 

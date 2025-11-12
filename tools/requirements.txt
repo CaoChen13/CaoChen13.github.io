@@ -1,9 +1,6 @@
 # Word 标注转 Anki 卡片工具依赖
 
-# Claude API
-anthropic>=0.40.0
-
-# HTTP 请求（AnkiConnect）
+# HTTP 请求（Claude API + AnkiConnect）
 requests>=2.31.0
 
 # 剪贴板操作
