@@ -516,7 +516,10 @@ class WordToAnkiConverter:
             marks = sent_data['marks']
 
             print(f"\n[{i}/{len(sentences)}] 处理句子:")
-            print(f"  {sentence[:60]}..." if len(sentence) > 60 else f"  {sentence}")
+            # 显示完整句子（带标记词提示）
+            mark_words = [m['text'] for m in marks]
+            print(f"  句子: {sentence}")
+            print(f"  标记: {', '.join(mark_words)}")
 
             # 调用 Claude 生成解释
             print("  → 调用 Claude API...")
@@ -525,6 +528,9 @@ class WordToAnkiConverter:
             if not explanation:
                 print("  ✗ 跳过（解释生成失败）")
                 continue
+
+            # 显示生成的解释
+            print(f"  解释: {explanation}")
 
             # 格式化卡片
             front = self._format_front(sentence, marks)
@@ -610,44 +616,12 @@ def main():
     with open(config_path, 'r', encoding='utf-8') as f:
         config = json.load(f)
 
-    # 检查 AnkiConnect 连接
-    print("检查 AnkiConnect 连接...")
+    # 检查连接
+    print("✓ 检查 AnkiConnect...")
     anki = AnkiConnector(config.get('anki_connect_url', 'http://localhost:8765'))
     if not anki.check_connection():
-        print("错误: 无法连接到 AnkiConnect")
-        print("请确保:")
-        print("  1. Anki 正在运行")
-        print("  2. AnkiConnect 插件已安装")
-        print("  3. AnkiConnect 配置正确（默认 http://localhost:8765）")
+        print("  ✗ 无法连接 Anki（请确保 Anki 正在运行）")
         sys.exit(1)
-    print("✓ AnkiConnect 连接成功")
-
-    # 检查 Claude API 配置
-    print("\n检查 Claude API 配置...")
-    claude = ClaudeExplainer(
-        config['claude_api_key'],
-        config.get('claude_model', 'claude-sonnet-4-5-20250929'),
-        config.get('claude_api_base_url')
-    )
-    print(f"  API 地址: {claude.api_url}")
-    print(f"  模型: {claude.model}")
-    print(f"  API Key 前缀: {claude.api_key[:15]}...")
-
-    # 测试 API 连接（可选，用短句测试）
-    print("\n  测试 API 连接...")
-    try:
-        test_result = claude.explain(
-            "This is a test.",
-            [{'text': 'test', 'type': 'red', 'position': (10, 14)}]
-        )
-        if test_result:
-            print("  ✓ Claude API 连接成功")
-        else:
-            print("  ⚠️  API 测试失败，但将继续运行（可能是临时错误）")
-    except Exception as e:
-        print(f"  ✗ API 测试失败: {e}")
-        print("\n  如果确认配置无误，可以忽略此警告继续运行")
-        input("\n  按回车键继续（或 Ctrl+C 退出）...")
 
     # 从剪贴板读取
     print("\n从剪贴板读取内容...")
@@ -697,9 +671,23 @@ def main():
     success_count = converter.convert(sentences)
 
     # 总结
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 60)
     print(f"完成！成功创建 {success_count}/{len(sentences)} 张卡片")
-    print("=" * 50)
+    print("=" * 60)
+
+    if success_count > 0:
+        deck_name = config['anki_deck']
+        tags = config.get('base_tags', ['reading-auto'])
+        article_tag = config.get('article_tag', '')
+
+        print("\n如何在 Anki 中查看卡片：")
+        print(f"  1. 打开 Anki → 点击牌组 \"{deck_name}\"")
+        print(f"  2. 或点击顶部 \"浏览\" → 搜索标签 \"tag:{tags[0]}\"")
+        if article_tag:
+            print(f"  3. 或搜索本次标签 \"tag:{article_tag}\"")
+        print(f"  4. 或搜索 \"added:1\" (今天添加的卡片)")
+        print("\n提示: 如果看不到，请点击 Anki 顶部的 \"同步\" 按钮")
+        print("=" * 60)
 
 
 if __name__ == "__main__":
