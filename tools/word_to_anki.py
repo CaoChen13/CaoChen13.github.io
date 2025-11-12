@@ -320,17 +320,20 @@ class SimpleRTFParser:
                 raw_text = sentence[start:end]
 
                 # 判断是否应该去掉空格：
-                # 如果当前和下一个都是单字符片段（如 'ci' 和 'st'），则可能是单词被拆分
-                # 如果有一个是完整单词（如 'present' 和 'and'），则保留空格
-                current_is_fragment = len(current['text']) <= 3 and ' ' not in current['text']
-                next_is_fragment = len(next_mark['text']) <= 3 and ' ' not in next_mark['text']
-                is_word_split = current_is_fragment and next_is_fragment and all(c == ' ' for c in between)
-
-                if is_word_split:
-                    # 单词被拆分：去掉所有空格
-                    current['text'] = ''.join(raw_text.split())
+                # 1. 如果中间只有空格，检查是否是单词拆分
+                # 2. 简单规则：如果next是短片段（<=3字符），很可能是拆分，去掉空格
+                # 3. 否则保留空格（如 "present and personal"）
+                if all(c == ' ' for c in between):
+                    # 中间只有空格
+                    next_is_short = len(next_mark['text']) <= 3
+                    if next_is_short:
+                        # next是短片段，很可能是拆分，去掉空格
+                        current['text'] = ''.join(raw_text.split())
+                    else:
+                        # next是正常单词，保留空格
+                        current['text'] = ' '.join(raw_text.split())
                 else:
-                    # 多词短语：保留空格
+                    # 中间有标点等，保留原样
                     current['text'] = ' '.join(raw_text.split())
             else:
                 # 不合并，保存当前标记并开始新的
@@ -600,11 +603,11 @@ class WordToAnkiConverter:
             word = mark['text']
             mark_type = mark['type']
 
-            # 选择颜色
+            # 选择样式（和正面一致）
             if mark_type == 'red':
-                color = 'red'
+                style = 'color: red; font-weight: bold;'
             else:  # yellow
-                color = '#DAA520'  # 深金色（在白底上更清晰）
+                style = 'background-color: yellow;'
 
             # 尝试匹配：精确匹配
             pattern = r'\b' + re.escape(word) + r'\b'
@@ -612,7 +615,7 @@ class WordToAnkiConverter:
                 # 精确匹配到了
                 match = re.search(pattern, result, re.IGNORECASE)
                 original_text = match.group()
-                result = result.replace(original_text, f'<b style="color: {color};">{original_text}</b>', 1)
+                result = result.replace(original_text, f'<span style="{style}">{original_text}</span>', 1)
 
         return result
 
