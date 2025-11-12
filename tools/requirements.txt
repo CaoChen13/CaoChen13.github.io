@@ -9,5 +9,5 @@ requests>=2.31.0
 # 剪贴板操作
 pyperclip>=1.8.2
 
-# 可选：更好的剪贴板支持（推荐）
-# pyclip>=0.7.0
+# Windows 剪贴板支持（读取 Word HTML 格式）
+pywin32>=306; sys_platform == 'win32'

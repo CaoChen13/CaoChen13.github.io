@@ -472,7 +472,48 @@ class WordToAnkiConverter:
 
 
 def read_from_clipboard() -> Optional[str]:
-    """从剪贴板读取内容"""
+    """从剪贴板读取内容（优先读取富文本格式）"""
+    import sys
+
+    # Windows: 尝试读取 HTML 格式
+    if sys.platform == 'win32':
+        try:
+            import win32clipboard
+
+            win32clipboard.OpenClipboard()
+            try:
+                # 尝试读取 HTML Format (CF_HTML)
+                # HTML Format 的格式 ID 通常是 49380，但也可以通过名称获取
+                html_format = win32clipboard.RegisterClipboardFormat("HTML Format")
+                if win32clipboard.IsClipboardFormatAvailable(html_format):
+                    html_data = win32clipboard.GetClipboardData(html_format)
+                    win32clipboard.CloseClipboard()
+
+                    # HTML Format 包含头部信息，需要提取实际的 HTML
+                    # 格式: Version:0.9\nStartHTML:...\nEndHTML:...\n<html>...</html>
+                    if isinstance(html_data, bytes):
+                        html_data = html_data.decode('utf-8', errors='ignore')
+
+                    # 提取 HTML 内容
+                    html_start = html_data.find('<html')
+                    if html_start == -1:
+                        html_start = html_data.find('<HTML')
+                    if html_start != -1:
+                        return html_data[html_start:]
+
+            except Exception as e:
+                print(f"读取 HTML 格式失败: {e}")
+            finally:
+                try:
+                    win32clipboard.CloseClipboard()
+                except:
+                    pass
+
+        except ImportError:
+            print("提示: 安装 pywin32 可以读取 Word 格式")
+            print("  pip install pywin32")
+
+    # 回退到纯文本
     try:
         import pyperclip
         content = pyperclip.paste()
