@@ -9,6 +9,7 @@ Word 标注转 Anki 卡片工具
 import json
 import re
 import sys
+import time
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import requests
@@ -373,7 +374,7 @@ class ClaudeExplainer:
 
     def explain(self, sentence: str, marks: List[Dict]) -> Optional[str]:
         """
-        为标记词生成解释
+        为标记词生成解释（带重试机制）
 
         Args:
             sentence: 原句
@@ -437,50 +438,73 @@ run into: 偶遇 → 遇到(问题)
             ]
         }
 
-        try:
-            # 使用 requests 直接调用
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=data,
-                timeout=60
-            )
+        # 重试配置
+        max_retries = 3
+        base_delay = 2  # 秒
 
-            # 检查响应
-            if response.status_code == 200:
-                result = response.json()
-                explanation = result['content'][0]['text'].strip()
-                return explanation
-            else:
-                # 处理错误
-                print(f"Claude API 调用失败: HTTP {response.status_code}")
-                print(f"  响应: {response.text[:200]}")
+        for attempt in range(max_retries):
+            try:
+                # 使用 requests 直接调用
+                response = requests.post(
+                    self.api_url,
+                    headers=headers,
+                    json=data,
+                    timeout=60
+                )
+
+                # 检查响应
+                if response.status_code == 200:
+                    result = response.json()
+                    explanation = result['content'][0]['text'].strip()
+                    return explanation
+                else:
+                    # HTTP 错误不重试（配置错误）
+                    print(f"  ✗ Claude API 调用失败: HTTP {response.status_code}")
+                    print(f"    响应: {response.text[:200]}")
+                    return None
+
+            except (requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.SSLError) as e:
+                # 网络错误，可以重试
+                error_type = type(e).__name__
+                if attempt < max_retries - 1:
+                    # 还有重试机会
+                    delay = base_delay * (2 ** attempt)  # 指数退避: 2, 4, 8
+                    print(f"  ⚠ 网络错误 ({error_type}): {str(e)[:80]}")
+                    print(f"    → 第 {attempt + 1}/{max_retries} 次尝试失败，{delay}秒后重试...")
+                    time.sleep(delay)
+                    continue  # 继续下一次循环
+                else:
+                    # 最后一次也失败了
+                    print(f"  ✗ 网络错误 ({error_type}): {str(e)[:80]}")
+                    print(f"    → 已重试 {max_retries} 次，全部失败")
+                    return None
+
+            except requests.exceptions.RequestException as e:
+                # 其他 requests 错误，不重试（配置错误）
+                print(f"  ✗ Claude API 调用失败: {e}")
+                print()
+                print("    调试信息:")
+                print(f"      API 地址: {self.api_url}")
+                print(f"      模型: {self.model}")
+                print(f"      API Key 前缀: {self.api_key[:15]}...")
+                print()
+                print("    常见问题:")
+                print("      1. API Key 错误 - 检查 config.json 中的 claude_api_key")
+                print("      2. 代理地址错误 - 检查 claude_api_base_url 是否正确")
+                print("      3. 模型名错误 - 检查代理站点支持的模型列表")
+                print("      4. 账户余额不足 - 联系代理站点管理员")
+                print()
                 return None
 
-        except requests.exceptions.Timeout:
-            print("Claude API 调用失败: 请求超时")
-            print("  提示: 网络可能较慢，请稍后重试")
-            return None
+            except Exception as e:
+                # 未知错误，不重试
+                print(f"  ✗ Claude API 调用失败: {e}")
+                return None
 
-        except requests.exceptions.RequestException as e:
-            print(f"Claude API 调用失败: {e}")
-            print()
-            print("  调试信息:")
-            print(f"    API 地址: {self.api_url}")
-            print(f"    模型: {self.model}")
-            print(f"    API Key 前缀: {self.api_key[:15]}...")
-            print()
-            print("  常见问题:")
-            print("    1. API Key 错误 - 检查 config.json 中的 claude_api_key")
-            print("    2. 代理地址错误 - 检查 claude_api_base_url 是否正确")
-            print("    3. 模型名错误 - 检查代理站点支持的模型列表")
-            print("    4. 账户余额不足 - 联系代理站点管理员")
-            print()
-            return None
-
-        except Exception as e:
-            print(f"Claude API 调用失败: {e}")
-            return None
+        # 不应该到这里
+        return None
 
 
 class AnkiConnector:
