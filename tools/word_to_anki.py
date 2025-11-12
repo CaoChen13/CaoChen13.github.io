@@ -239,8 +239,8 @@ class SimpleRTFParser:
                         'position': (start_pos, end_pos)
                     })
 
-                # 句子结束判断
-                if text.rstrip().endswith(('.', '!', '?', '。', '！', '？')):
+                # 句子结束判断（句号、感叹号、问号、分号）
+                if text.rstrip().endswith(('.', '!', '?', ';', '。', '！', '？', '；')):
                     if self.current_marks:
                         self.sentences.append({
                             'sentence': self.current_sentence.strip(),
@@ -263,7 +263,59 @@ class SimpleRTFParser:
                 'marks': parser.current_marks
             })
 
+        # 合并每个句子中相邻的相同类型标记（修复单词被拆分的问题）
+        for sent_data in parser.sentences:
+            sent_data['marks'] = self._merge_adjacent_marks(
+                sent_data['marks'],
+                sent_data['sentence']
+            )
+
         return parser.sentences
+
+    def _merge_adjacent_marks(self, marks: List[Dict], sentence: str) -> List[Dict]:
+        """
+        合并相邻的相同类型标记
+
+        Args:
+            marks: 标记列表
+            sentence: 原句
+
+        Returns:
+            合并后的标记列表
+        """
+        if not marks:
+            return marks
+
+        # 按位置排序
+        marks = sorted(marks, key=lambda m: m['position'][0])
+
+        merged = []
+        current = marks[0].copy()
+
+        for next_mark in marks[1:]:
+            # 检查是否相邻且类型相同
+            current_end = current['position'][1]
+            next_start = next_mark['position'][0]
+
+            # 相邻判断：位置差小于等于 1（可能有一个空格）
+            is_adjacent = (next_start - current_end) <= 1
+            same_type = current['type'] == next_mark['type']
+
+            if is_adjacent and same_type:
+                # 合并：扩展位置，拼接文本
+                current['position'] = (current['position'][0], next_mark['position'][1])
+                # 从原句中提取实际文本（避免多余空格）
+                start, end = current['position']
+                current['text'] = sentence[start:end].strip()
+            else:
+                # 不合并，保存当前标记并开始新的
+                merged.append(current)
+                current = next_mark.copy()
+
+        # 添加最后一个
+        merged.append(current)
+
+        return merged
 
 
 class ClaudeExplainer:
@@ -317,11 +369,17 @@ class ClaudeExplainer:
 标记词：
 {chr(10).join(marks_desc)}
 
-请用极简的中文（1-2 行）解释这些标记词在此句中的：
-- 红色词：核心含义 + 词性
-- 黄色词：在此语境下的特殊用法、搭配或语义要点
+要求：用中文解释标记词，格式必须严格遵守：
+- 每个词一行
+- 格式：单词 (词性): 中文解释
+- 不要标题、不要分点、不要额外说明
+- 直接给出解释，不超过 3 行
 
-要求：直击要点，适合考研复习，不要啰嗦。"""
+示例：
+upskilling (v.): 提升技能
+employable (adj.): 有就业能力的
+
+现在请按此格式解释上述标记词："""
 
         # 构建请求
         headers = {
