@@ -642,8 +642,14 @@ class WordToAnkiConverter:
 
         for mark in sorted_marks:
             start, end = mark['position']
-            text = mark['text']  # 合并后的文本
+            text = mark['text']  # 合并后的文本（干净的，可能去掉了空格）
             mark_type = mark['type']
+
+            # 获取原始片段（可能包含尾部空格）
+            original_segment = result[start:end]
+
+            # 计算尾部空格数量
+            trailing_spaces = len(original_segment) - len(original_segment.rstrip())
 
             # 构建样式
             if mark_type == 'red':
@@ -652,8 +658,8 @@ class WordToAnkiConverter:
                 styled = f'<span style="background-color: yellow;">{text}</span>'
 
             # 按位置替换（从后往前，避免位置变化）
-            # 用合并后的 text 替换原句中 position 位置的内容（可能是拆分的）
-            result = result[:start] + styled + result[end:]
+            # 替换时保留原始的尾部空格，避免单词连在一起
+            result = result[:start] + styled + (' ' * trailing_spaces) + result[end:]
 
         return result
 
