@@ -506,48 +506,27 @@ run into: 偶遇 → 遇到(问题)
                     return explanation
                 else:
                     # HTTP 错误不重试（配置错误）
-                    print(f"  ✗ Claude API 调用失败: HTTP {response.status_code}")
-                    print(f"    响应: {response.text[:200]}")
                     return None
 
             except (requests.exceptions.Timeout,
                     requests.exceptions.ConnectionError,
                     requests.exceptions.SSLError) as e:
                 # 网络错误，可以重试
-                error_type = type(e).__name__
                 if attempt < max_retries - 1:
                     # 还有重试机会
                     delay = base_delay * (2 ** attempt)  # 指数退避: 2, 4, 8
-                    print(f"  ⚠ 网络错误 ({error_type}): {str(e)[:80]}")
-                    print(f"    → 第 {attempt + 1}/{max_retries} 次尝试失败，{delay}秒后重试...")
                     time.sleep(delay)
                     continue  # 继续下一次循环
                 else:
                     # 最后一次也失败了
-                    print(f"  ✗ 网络错误 ({error_type}): {str(e)[:80]}")
-                    print(f"    → 已重试 {max_retries} 次，全部失败")
                     return None
 
             except requests.exceptions.RequestException as e:
                 # 其他 requests 错误，不重试（配置错误）
-                print(f"  ✗ Claude API 调用失败: {e}")
-                print()
-                print("    调试信息:")
-                print(f"      API 地址: {self.api_url}")
-                print(f"      模型: {self.model}")
-                print(f"      API Key 前缀: {self.api_key[:15]}...")
-                print()
-                print("    常见问题:")
-                print("      1. API Key 错误 - 检查 config.json 中的 claude_api_key")
-                print("      2. 代理地址错误 - 检查 claude_api_base_url 是否正确")
-                print("      3. 模型名错误 - 检查代理站点支持的模型列表")
-                print("      4. 账户余额不足 - 联系代理站点管理员")
-                print()
                 return None
 
             except Exception as e:
                 # 未知错误，不重试
-                print(f"  ✗ Claude API 调用失败: {e}")
                 return None
 
         # 不应该到这里
@@ -725,51 +704,37 @@ class WordToAnkiConverter:
         for i, sent_data in enumerate(sentences, 1):
             sentence = sent_data['sentence']
             marks = sent_data['marks']
-
-            print(f"\n[{i}/{len(sentences)}] 处理句子:")
-            # 显示完整句子（带标记词提示）
             mark_words = [m['text'] for m in marks]
-            print(f"  句子: {sentence}")
-            print(f"  标记: {', '.join(mark_words)}")
+
+            print(f"[{i}/{len(sentences)}] {', '.join(mark_words)}", end=" ... ")
 
             # 调用 Claude 生成解释
-            print("  → 调用 Claude API...")
             explanation = self.claude.explain(sentence, marks)
 
             if not explanation:
-                print("  ✗ 跳过（解释生成失败）")
-                # 记录失败信息
+                print("✗ 失败")
                 failed_items.append({
                     'index': i,
-                    'sentence': sentence,
-                    'marks': mark_words,
-                    'reason': 'API 调用失败'
+                    'marks': mark_words
                 })
                 continue
-
-            # 显示生成的解释
-            print(f"  解释: {explanation}")
 
             # 格式化卡片
             front = self._format_front(sentence, marks)
             back = self._format_back(explanation, marks)
 
             # 添加到 Anki
-            print("  → 添加到 Anki...")
             note_id = self.anki.add_note(deck_name, model_name, front, back, tags,
                                          front_field, back_field)
 
             if note_id:
-                print(f"  ✓ 成功（卡片 ID: {note_id}）")
+                print("✓")
                 success_count += 1
             else:
-                print("  ✗ 跳过（Anki 添加失败）")
-                # 记录失败信息
+                print("✗ 失败")
                 failed_items.append({
                     'index': i,
-                    'sentence': sentence,
-                    'marks': mark_words,
-                    'reason': 'Anki 添加失败'
+                    'marks': mark_words
                 })
 
         return success_count, failed_items
@@ -896,42 +861,13 @@ def main():
     success_count, failed_items = converter.convert(sentences)
 
     # 总结
-    print("\n" + "=" * 60)
-    print(f"完成！成功创建 {success_count}/{len(sentences)} 张卡片")
-    print("=" * 60)
+    print(f"\n完成：{success_count}/{len(sentences)} 成功")
 
     # 如果有失败的，显示失败总结
     if failed_items:
-        print("\n" + "!" * 60)
-        print(f"失败总结：{len(failed_items)} 个句子未能创建卡片")
-        print("!" * 60)
-
-        for item in failed_items:
-            print(f"\n❌ 第 {item['index']} 句 - {item['reason']}")
-            print(f"   句子: {item['sentence'][:80]}{'...' if len(item['sentence']) > 80 else ''}")
-            print(f"   标记: {', '.join(item['marks'])}")
-
-        print("\n" + "!" * 60)
-        print("💡 提示:")
-        if any(item['reason'] == 'API 调用失败' for item in failed_items):
-            print("  - API 调用失败: 检查网络连接，或稍后重新运行")
-        if any(item['reason'] == 'Anki 添加失败' for item in failed_items):
-            print("  - Anki 添加失败: 检查模板名称和字段名称是否正确")
-        print("!" * 60)
-
-    if success_count > 0:
-        deck_name = config['anki_deck']
-        tags = config.get('base_tags', ['reading-auto'])
-        article_tag = config.get('article_tag', '')
-
-        print("\n如何在 Anki 中查看卡片：")
-        print(f"  1. 打开 Anki → 点击牌组 \"{deck_name}\"")
-        print(f"  2. 或点击顶部 \"浏览\" → 搜索标签 \"tag:{tags[0]}\"")
-        if article_tag:
-            print(f"  3. 或搜索本次标签 \"tag:{article_tag}\"")
-        print(f"  4. 或搜索 \"added:1\" (今天添加的卡片)")
-        print("\n提示: 如果看不到，请点击 Anki 顶部的 \"同步\" 按钮")
-        print("=" * 60)
+        print(f"\n失败: ", end="")
+        failed_indices = [f"第{item['index']}句({', '.join(item['marks'])})" for item in failed_items]
+        print(", ".join(failed_indices))
 
 
 if __name__ == "__main__":
