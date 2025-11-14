@@ -723,7 +723,8 @@ class WordToAnkiConverter:
             explanation, error = self.claude.explain(sentence, marks)
 
             if not explanation:
-                print(f"✗ ({error})")
+                print("✗")
+                print(f"  → 失败原因: {error}")
                 failed_items.append({
                     'index': i,
                     'marks': mark_words,
@@ -743,11 +744,12 @@ class WordToAnkiConverter:
                 print("✓")
                 success_count += 1
             else:
-                print("✗ (Anki)")
+                print("✗")
+                print(f"  → 失败原因: Anki 添加失败")
                 failed_items.append({
                     'index': i,
                     'marks': mark_words,
-                    'reason': 'Anki'
+                    'reason': 'Anki添加失败'
                 })
 
         return success_count, failed_items
