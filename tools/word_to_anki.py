@@ -419,7 +419,7 @@ class ClaudeExplainer:
         else:
             self.api_url = "https://api.anthropic.com/v1/messages"
 
-    def explain(self, sentence: str, marks: List[Dict]) -> Optional[str]:
+    def explain(self, sentence: str, marks: List[Dict]) -> Tuple[Optional[str], Optional[str]]:
         """
         为标记词生成解释（带重试机制）
 
@@ -428,7 +428,7 @@ class ClaudeExplainer:
             marks: 标记列表 [{'text': '词', 'type': 'red/yellow'}, ...]
 
         Returns:
-            中文解释字符串，失败返回 None
+            (中文解释字符串, 错误原因)，成功时错误原因为 None
         """
         # 构建提示词
         red_marks = [m['text'] for m in marks if m['type'] == 'red']
@@ -503,34 +503,45 @@ run into: 偶遇 → 遇到(问题)
                 if response.status_code == 200:
                     result = response.json()
                     explanation = result['content'][0]['text'].strip()
-                    return explanation
+                    return explanation, None
                 else:
                     # HTTP 错误不重试（配置错误）
-                    return None
+                    return None, f"HTTP {response.status_code}"
 
-            except (requests.exceptions.Timeout,
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.SSLError) as e:
-                # 网络错误，可以重试
+            except requests.exceptions.Timeout:
                 if attempt < max_retries - 1:
-                    # 还有重试机会
-                    delay = base_delay * (2 ** attempt)  # 指数退避: 2, 4, 8
+                    delay = base_delay * (2 ** attempt)
                     time.sleep(delay)
-                    continue  # 继续下一次循环
+                    continue
                 else:
-                    # 最后一次也失败了
-                    return None
+                    return None, "超时"
+
+            except requests.exceptions.SSLError:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    time.sleep(delay)
+                    continue
+                else:
+                    return None, "SSL错误"
+
+            except requests.exceptions.ConnectionError:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    time.sleep(delay)
+                    continue
+                else:
+                    return None, "连接失败"
 
             except requests.exceptions.RequestException as e:
                 # 其他 requests 错误，不重试（配置错误）
-                return None
+                return None, "请求错误"
 
             except Exception as e:
                 # 未知错误，不重试
-                return None
+                return None, "未知错误"
 
         # 不应该到这里
-        return None
+        return None, "重试失败"
 
 
 class AnkiConnector:
@@ -709,13 +720,14 @@ class WordToAnkiConverter:
             print(f"[{i}/{len(sentences)}] {', '.join(mark_words)}", end=" ... ")
 
             # 调用 Claude 生成解释
-            explanation = self.claude.explain(sentence, marks)
+            explanation, error = self.claude.explain(sentence, marks)
 
             if not explanation:
-                print("✗ 失败")
+                print(f"✗ ({error})")
                 failed_items.append({
                     'index': i,
-                    'marks': mark_words
+                    'marks': mark_words,
+                    'reason': error
                 })
                 continue
 
@@ -731,10 +743,11 @@ class WordToAnkiConverter:
                 print("✓")
                 success_count += 1
             else:
-                print("✗ 失败")
+                print("✗ (Anki)")
                 failed_items.append({
                     'index': i,
-                    'marks': mark_words
+                    'marks': mark_words,
+                    'reason': 'Anki'
                 })
 
         return success_count, failed_items
@@ -866,7 +879,7 @@ def main():
     # 如果有失败的，显示失败总结
     if failed_items:
         print(f"\n失败: ", end="")
-        failed_indices = [f"第{item['index']}句({', '.join(item['marks'])})" for item in failed_items]
+        failed_indices = [f"第{item['index']}句({item['reason']})" for item in failed_items]
         print(", ".join(failed_indices))
 
 
