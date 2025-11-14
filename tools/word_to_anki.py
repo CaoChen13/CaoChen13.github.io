@@ -506,7 +506,16 @@ run into: 偶遇 → 遇到(问题)
                     return explanation, None
                 else:
                     # HTTP 错误不重试（配置错误）
-                    return None, f"HTTP {response.status_code}"
+                    error_msgs = {
+                        401: "HTTP 401 - API Key无效，请检查config.json中的claude_api_key",
+                        403: "HTTP 403 - 访问被拒绝，请检查API Key权限",
+                        429: "HTTP 429 - 请求过于频繁，请稍后重试或联系代理站点",
+                        500: "HTTP 500 - 服务器内部错误，代理站点出现问题",
+                        502: "HTTP 502 - 网关错误，代理站点连接Claude失败",
+                        503: "HTTP 503 - 服务暂时不可用，代理站点维护中"
+                    }
+                    error_msg = error_msgs.get(response.status_code, f"HTTP {response.status_code} - API调用失败")
+                    return None, error_msg
 
             except requests.exceptions.Timeout:
                 if attempt < max_retries - 1:
@@ -514,7 +523,7 @@ run into: 偶遇 → 遇到(问题)
                     time.sleep(delay)
                     continue
                 else:
-                    return None, "超时"
+                    return None, "请求超时（已重试3次），网络较慢或代理站点响应慢"
 
             except requests.exceptions.SSLError:
                 if attempt < max_retries - 1:
@@ -522,7 +531,7 @@ run into: 偶遇 → 遇到(问题)
                     time.sleep(delay)
                     continue
                 else:
-                    return None, "SSL错误"
+                    return None, "SSL连接错误（已重试3次），代理站点网络不稳定"
 
             except requests.exceptions.ConnectionError:
                 if attempt < max_retries - 1:
@@ -530,18 +539,18 @@ run into: 偶遇 → 遇到(问题)
                     time.sleep(delay)
                     continue
                 else:
-                    return None, "连接失败"
+                    return None, "网络连接失败（已重试3次），请检查网络或代理设置"
 
             except requests.exceptions.RequestException as e:
                 # 其他 requests 错误，不重试（配置错误）
-                return None, "请求错误"
+                return None, f"API请求错误: {str(e)[:50]}"
 
             except Exception as e:
                 # 未知错误，不重试
-                return None, "未知错误"
+                return None, f"未知错误: {str(e)[:50]}"
 
         # 不应该到这里
-        return None, "重试失败"
+        return None, "重试失败（已尝试3次）"
 
 
 class AnkiConnector:
@@ -745,11 +754,11 @@ class WordToAnkiConverter:
                 success_count += 1
             else:
                 print("✗")
-                print(f"  → 失败原因: Anki 添加失败")
+                print(f"  → 失败原因: Anki添加失败，请检查模板名称、字段名称或卡片是否重复")
                 failed_items.append({
                     'index': i,
                     'marks': mark_words,
-                    'reason': 'Anki添加失败'
+                    'reason': 'Anki添加失败（检查模板/字段名称）'
                 })
 
         return success_count, failed_items
