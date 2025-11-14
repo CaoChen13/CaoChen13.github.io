@@ -698,12 +698,12 @@ class WordToAnkiConverter:
 
         return result
 
-    def convert(self, sentences: List[Dict]) -> int:
+    def convert(self, sentences: List[Dict]) -> Tuple[int, List[Dict]]:
         """
         转换句子列表为 Anki 卡片
 
         Returns:
-            成功创建的卡片数量
+            (成功数量, 失败列表)
         """
         deck_name = self.config['anki_deck']
         model_name = self.config['anki_model']
@@ -718,6 +718,7 @@ class WordToAnkiConverter:
             tags = base_tags
 
         success_count = 0
+        failed_items = []  # 记录失败的句子
 
         print(f"\n开始处理 {len(sentences)} 个句子...")
 
@@ -737,6 +738,13 @@ class WordToAnkiConverter:
 
             if not explanation:
                 print("  ✗ 跳过（解释生成失败）")
+                # 记录失败信息
+                failed_items.append({
+                    'index': i,
+                    'sentence': sentence,
+                    'marks': mark_words,
+                    'reason': 'API 调用失败'
+                })
                 continue
 
             # 显示生成的解释
@@ -756,8 +764,15 @@ class WordToAnkiConverter:
                 success_count += 1
             else:
                 print("  ✗ 跳过（Anki 添加失败）")
+                # 记录失败信息
+                failed_items.append({
+                    'index': i,
+                    'sentence': sentence,
+                    'marks': mark_words,
+                    'reason': 'Anki 添加失败'
+                })
 
-        return success_count
+        return success_count, failed_items
 
 
 def read_from_clipboard() -> Optional[str]:
@@ -878,12 +893,31 @@ def main():
 
     # 转换并添加到 Anki
     converter = WordToAnkiConverter(config)
-    success_count = converter.convert(sentences)
+    success_count, failed_items = converter.convert(sentences)
 
     # 总结
     print("\n" + "=" * 60)
     print(f"完成！成功创建 {success_count}/{len(sentences)} 张卡片")
     print("=" * 60)
+
+    # 如果有失败的，显示失败总结
+    if failed_items:
+        print("\n" + "!" * 60)
+        print(f"失败总结：{len(failed_items)} 个句子未能创建卡片")
+        print("!" * 60)
+
+        for item in failed_items:
+            print(f"\n❌ 第 {item['index']} 句 - {item['reason']}")
+            print(f"   句子: {item['sentence'][:80]}{'...' if len(item['sentence']) > 80 else ''}")
+            print(f"   标记: {', '.join(item['marks'])}")
+
+        print("\n" + "!" * 60)
+        print("💡 提示:")
+        if any(item['reason'] == 'API 调用失败' for item in failed_items):
+            print("  - API 调用失败: 检查网络连接，或稍后重新运行")
+        if any(item['reason'] == 'Anki 添加失败' for item in failed_items):
+            print("  - Anki 添加失败: 检查模板名称和字段名称是否正确")
+        print("!" * 60)
 
     if success_count > 0:
         deck_name = config['anki_deck']
