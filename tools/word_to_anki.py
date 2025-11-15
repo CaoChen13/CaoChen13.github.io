@@ -736,6 +736,10 @@ class WordToAnkiConverter:
 
             print(f"[{i}/{len(sentences)}] {', '.join(mark_words)}", end=" ... ")
 
+            # 如果不是第一个请求，等待一下（避免触发速率限制）
+            if i > 1:
+                time.sleep(1.5)  # 每个请求间隔 1.5 秒
+
             # 调用 Claude 生成解释
             explanation, error = self.claude.explain(sentence, marks)
 
