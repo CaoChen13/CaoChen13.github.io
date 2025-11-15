@@ -512,12 +512,19 @@ run into: 偶遇 → 遇到(问题)
                     result = response.json()
                     explanation = result['content'][0]['text'].strip()
                     return explanation, None
+                elif response.status_code == 429:
+                    # HTTP 429 - 请求过于频繁，可以重试
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        time.sleep(delay)
+                        continue
+                    else:
+                        return None, "HTTP 429 - 请求过于频繁（已重试3次），代理站点限流严格"
                 else:
-                    # HTTP 错误不重试（配置错误）
+                    # 其他 HTTP 错误不重试（配置错误或服务器问题）
                     error_msgs = {
                         401: "HTTP 401 - API Key无效，请检查config.json中的claude_api_key",
                         403: "HTTP 403 - 访问被拒绝，请检查API Key权限",
-                        429: "HTTP 429 - 请求过于频繁，请稍后重试或联系代理站点",
                         500: "HTTP 500 - 服务器内部错误，代理站点出现问题",
                         502: "HTTP 502 - 网关错误，代理站点连接Claude失败",
                         503: "HTTP 503 - 服务暂时不可用，代理站点维护中"
