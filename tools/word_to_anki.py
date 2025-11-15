@@ -227,9 +227,15 @@ class SimpleRTFParser:
                 mark_type = None
                 if self.current_style.get('style'):
                     style = self.current_style['style']
-                    if 'color' in style and 'red' in style.lower():
+                    style_lower = style.lower()
+
+                    # 检测红色：任何 color 样式（不是 background）
+                    # Word 可能生成：color:red, color:#FF0000, color:rgb(255,0,0)
+                    if 'color' in style_lower and 'background' not in style_lower:
                         mark_type = 'red'
-                    elif 'background' in style and 'yellow' in style.lower():
+
+                    # 检测黄色背景
+                    elif 'background' in style_lower and ('yellow' in style_lower or '#ffff' in style_lower):
                         mark_type = 'yellow'
 
                 if mark_type:
