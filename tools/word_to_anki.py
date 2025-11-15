@@ -229,10 +229,12 @@ class SimpleRTFParser:
                     style = self.current_style['style']
                     style_lower = style.lower()
 
-                    # 检测红色：任何 color 样式（不是 background）
-                    # Word 可能生成：color:red, color:#FF0000, color:rgb(255,0,0)
+                    # 检测红色：color 样式，但排除黑色
+                    # Word 可能生成：color:red, color:#FF0000, color:#C00000, color:rgb(255,0,0)
                     if 'color' in style_lower and 'background' not in style_lower:
-                        mark_type = 'red'
+                        # 排除黑色文字
+                        if not ('black' in style_lower or '#000000' in style_lower or 'rgb(0,0,0)' in style_lower.replace(' ', '')):
+                            mark_type = 'red'
 
                     # 检测黄色背景
                     elif 'background' in style_lower and ('yellow' in style_lower or '#ffff' in style_lower):
