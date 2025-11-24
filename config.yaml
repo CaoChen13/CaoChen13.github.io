@@ -1,0 +1,27 @@
+# Telegram PDF Magazine Downloader Configuration
+
+# Root directory where all magazines will be downloaded
+# Use absolute path for best results (e.g., "D:/Magazines" on Windows)
+download_root: "./downloads"
+
+# Minimum file size in MB - files smaller than this will be ignored
+# This helps filter out promotional materials and small documents
+min_file_size_mb: 3
+
+# Maximum number of messages to check per channel per run
+# Only applies on first run or when no state exists
+max_messages_per_channel: 200
+
+# List of channels to monitor and download from
+channels:
+  # Example: New Scientist Magazine
+  - username: "newscientistmag"
+    subfolder: "NewScientist"
+
+  # Example: The Economist
+  - username: "economistpdfs"
+    subfolder: "TheEconomist"
+
+  # Add more channels below following the same format:
+  # - username: "channel_username"  # The part after t.me/ in the channel URL
+  #   subfolder: "FolderName"        # Where to save PDFs for this channel

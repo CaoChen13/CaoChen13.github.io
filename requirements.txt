@@ -1,0 +1,8 @@
+# Telegram API client
+telethon>=1.34.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# YAML configuration parsing
+PyYAML>=6.0.1
