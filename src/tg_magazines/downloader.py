@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 from telethon import TelegramClient
 from telethon.tl.types import DocumentAttributeFilename, Message
+from tqdm import tqdm
 
 from .config import AppConfig, ChannelConfig
 from .state import StateManager, ChannelState
@@ -149,8 +150,29 @@ class TelegramDownloader:
                 logger.info(f"[DRY RUN] Would download to: {destination}")
                 return True
 
-            logger.info(f"Downloading: {destination.name} ({format_file_size(message.document.size)})")
-            await self.client.download_media(message, str(destination))
+            file_size = message.document.size
+            logger.info(f"Downloading: {destination.name} ({format_file_size(file_size)})")
+
+            # Create progress bar
+            with tqdm(
+                total=file_size,
+                unit='B',
+                unit_scale=True,
+                unit_divisor=1024,
+                desc=destination.name[:30],
+                ncols=80,
+                leave=True
+            ) as pbar:
+                # Progress callback for telethon
+                async def progress_callback(received, total):
+                    pbar.update(received - pbar.n)
+
+                await self.client.download_media(
+                    message,
+                    str(destination),
+                    progress_callback=progress_callback
+                )
+
             logger.info(f"Successfully downloaded: {destination.name}")
             return True
 
